@@ -16,22 +16,22 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return callback(null, true);
-      
+
       // Allow localhost
-      if (origin.includes('localhost')) return callback(null, true);
-      
+      if (origin.includes("localhost")) return callback(null, true);
+
       // Allow Railway domains
-      if (origin.includes('.railway.app')) return callback(null, true);
-      
+      if (origin.includes(".railway.app")) return callback(null, true);
+
       // Allow configured frontend URL
-      const allowedOrigins = Array.isArray(config.cors.origin) 
-        ? config.cors.origin 
+      const allowedOrigins = Array.isArray(config.cors.origin)
+        ? config.cors.origin
         : [config.cors.origin];
-      
+
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      
+
       // Reject others
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
   })
