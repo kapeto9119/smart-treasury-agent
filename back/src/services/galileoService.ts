@@ -51,20 +51,9 @@ class GalileoService {
         logStreamName: this.logStreamName,
       });
 
-      // Enable automatic evaluation metrics
-      console.log("📊 Enabling Galileo evaluation metrics...");
-      await enableMetrics({
-        projectName: this.projectName,
-        logStreamName: this.logStreamName,
-        metrics: [
-          GalileoScorers.ContextAdherence, // Checks if Claude sticks to financial data
-          GalileoScorers.Correctness, // Evaluates accuracy of recommendations
-          GalileoScorers.Completeness, // Ensures thorough analysis
-        ],
-      });
-
       this.isInitialized = true;
-      console.log(`📊 Galileo initialized successfully with automatic metrics`);
+      console.log(`✅ Galileo initialized successfully`);
+      console.log(`📊 Metrics will be enabled after first trace is logged`);
     } catch (error) {
       console.error("❌ Failed to initialize Galileo:", error);
       if (error instanceof Error) {
@@ -85,8 +74,37 @@ class GalileoService {
       await logger.startSession();
       this.sessionStarted = true;
       console.log("📊 Galileo session started");
+
+      // Enable metrics after session is started (log stream now exists)
+      await this.enableMetricsIfNeeded();
     } catch (error) {
       console.error("❌ Failed to start Galileo session:", error);
+    }
+  }
+
+  private metricsEnabled = false;
+
+  private async enableMetricsIfNeeded(): Promise<void> {
+    if (this.metricsEnabled) {
+      return;
+    }
+
+    try {
+      console.log("📊 Enabling Galileo evaluation metrics...");
+      await enableMetrics({
+        projectName: this.projectName,
+        logStreamName: this.logStreamName,
+        metrics: [
+          GalileoScorers.ContextAdherence, // Checks if Claude sticks to financial data
+          GalileoScorers.Correctness, // Evaluates accuracy of recommendations
+          GalileoScorers.Completeness, // Ensures thorough analysis
+        ],
+      });
+      this.metricsEnabled = true;
+      console.log("✅ Galileo evaluation metrics enabled");
+    } catch (error) {
+      console.error("⚠️  Failed to enable Galileo metrics:", error);
+      // Don't throw - metrics are optional, logging should still work
     }
   }
 
