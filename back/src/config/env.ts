@@ -28,7 +28,7 @@ export const config = {
     apiKey: process.env.GALILEO_API_KEY || "",
     projectId: process.env.GALILEO_PROJECT_ID || "",
     consoleUrl:
-      process.env.GALILEO_CONSOLE_URL || "https://console.rungalileo.io",
+      process.env.GALILEO_CONSOLE_URL || "https://console.galileo.ai",
   },
 
   browserUse: {

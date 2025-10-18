@@ -12,7 +12,7 @@ class GalileoService {
     this.apiKey = config.galileo.apiKey || "";
     this.projectName = config.galileo.projectId || "smart-treasury-agent";
     this.consoleUrl =
-      config.galileo.consoleUrl || "https://console.rungalileo.io";
+      config.galileo.consoleUrl || "https://console.galileo.ai";
 
     if (this.apiKey) {
       console.log(

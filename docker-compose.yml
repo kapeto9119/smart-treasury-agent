@@ -43,7 +43,7 @@ services:
       - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
       - GALILEO_API_KEY=${GALILEO_API_KEY}
       - GALILEO_PROJECT_ID=${GALILEO_PROJECT_ID}
-      - GALILEO_CONSOLE_URL=${GALILEO_CONSOLE_URL:-https://console.rungalileo.io}
+      - GALILEO_CONSOLE_URL=${GALILEO_CONSOLE_URL:-https://console.galileo.ai}
       - PYTHON_SERVICE_URL=http://python-service:8000
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     volumes:
