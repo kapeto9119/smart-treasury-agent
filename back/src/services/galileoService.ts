@@ -1,4 +1,4 @@
-import { init, getLogger, flush } from "galileo";
+import { init, getLogger, flush, enableMetrics, GalileoScorers } from "galileo";
 import { config } from "../config/env.js";
 
 class GalileoService {
@@ -20,7 +20,10 @@ class GalileoService {
         "✅ Galileo service configured for project:",
         this.projectName
       );
-      this.initialize();
+      // Initialize asynchronously (don't block constructor)
+      this.initialize().catch((error) => {
+        console.error("❌ Failed to initialize Galileo in constructor:", error);
+      });
     } else {
       console.warn(
         "⚠️  Galileo API key not configured - logging will be skipped"
@@ -28,7 +31,7 @@ class GalileoService {
     }
   }
 
-  private initialize(): void {
+  private async initialize(): Promise<void> {
     if (!this.apiKey || this.isInitialized) {
       return;
     }
@@ -48,8 +51,20 @@ class GalileoService {
         logStreamName: this.logStreamName,
       });
 
+      // Enable automatic evaluation metrics
+      console.log("📊 Enabling Galileo evaluation metrics...");
+      await enableMetrics({
+        projectName: this.projectName,
+        logStreamName: this.logStreamName,
+        metrics: [
+          GalileoScorers.ContextAdherence, // Checks if Claude sticks to financial data
+          GalileoScorers.Correctness, // Evaluates accuracy of recommendations
+          GalileoScorers.Completeness, // Ensures thorough analysis
+        ],
+      });
+
       this.isInitialized = true;
-      console.log(`📊 Galileo initialized successfully`);
+      console.log(`📊 Galileo initialized successfully with automatic metrics`);
     } catch (error) {
       console.error("❌ Failed to initialize Galileo:", error);
       if (error instanceof Error) {
