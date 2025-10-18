@@ -154,6 +154,9 @@ class GalileoService {
         output: claudeOutput,
       });
 
+      // Flush immediately to send to Galileo
+      await flush();
+
       console.log(`✅ Logged scenario ${scenarioId} to Galileo`);
     } catch (error) {
       console.error(
