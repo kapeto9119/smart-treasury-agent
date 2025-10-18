@@ -1,0 +1,85 @@
+services:
+  # Python FastAPI Microservice
+  python-service:
+    build:
+      context: ./python-ms
+      dockerfile: Dockerfile
+    container_name: treasury-python-service
+    ports:
+      - "8000:8000"
+    environment:
+      - DAYTONA_API_KEY=${DAYTONA_API_KEY}
+      - DAYTONA_API_URL=${DAYTONA_API_URL:-https://app.daytona.io/api}
+      - DAYTONA_TARGET=${DAYTONA_TARGET:-us}
+      - PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - AUTO_CLEANUP=${AUTO_CLEANUP:-false}
+    volumes:
+      - ./python-ms:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Node.js Backend
+  backend:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    container_name: treasury-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=${NODE_ENV:-development}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - WORKOS_API_KEY=${WORKOS_API_KEY}
+      - WORKOS_CLIENT_ID=${WORKOS_CLIENT_ID}
+      - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
+      - GALILEO_API_KEY=${GALILEO_API_KEY}
+      - GALILEO_PROJECT_ID=${GALILEO_PROJECT_ID}
+      - GALILEO_CONSOLE_URL=${GALILEO_CONSOLE_URL:-https://console.galileo.ai}
+      - PYTHON_SERVICE_URL=http://python-service:8000
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+    volumes:
+      - ./back:/app
+      - /app/node_modules
+    depends_on:
+      - python-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./front/smart-treasury-agent
+      dockerfile: Dockerfile
+    container_name: treasury-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3001/api
+      - WORKOS_API_KEY=${WORKOS_API_KEY}
+      - WORKOS_CLIENT_ID=${WORKOS_CLIENT_ID}
+      - WORKOS_REDIRECT_URI=${WORKOS_REDIRECT_URI:-http://localhost:3000/callback}
+      - NEXT_PUBLIC_WORKOS_CLIENT_ID=${WORKOS_CLIENT_ID}
+    volumes:
+      - ./front/smart-treasury-agent:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  default:
+    name: treasury-network

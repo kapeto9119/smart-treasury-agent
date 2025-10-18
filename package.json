@@ -1,0 +1,32 @@
+{
+  "name": "smart-treasury-agent",
+  "version": "1.0.0",
+  "description": "AI-powered treasury management platform for Daytona HackSprint SF 2025",
+  "private": true,
+  "workspaces": [
+    "back",
+    "front/smart-treasury-agent"
+  ],
+  "scripts": {
+    "install:all": "npm install && cd back && npm install && cd ../front/smart-treasury-agent && npm install",
+    "dev:backend": "cd back && npm run dev",
+    "dev:frontend": "cd front/smart-treasury-agent && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "seed": "cd back && npx tsx src/scripts/seedData.ts",
+    "build:backend": "cd back && npm run build",
+    "build:frontend": "cd front/smart-treasury-agent && npm run build",
+    "build": "npm run build:backend && npm run build:frontend"
+  },
+  "keywords": [
+    "treasury",
+    "finance",
+    "ai",
+    "daytona",
+    "hackathon"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

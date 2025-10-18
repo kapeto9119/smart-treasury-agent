@@ -1,0 +1,79 @@
+{
+  "mode": "balanced",
+  "accounts": [
+    {
+      "id": "acc1",
+      "name": "Operating Checking",
+      "bank": "JPMorgan Chase",
+      "currency": "USD",
+      "balance": 2500000,
+      "account_type": "checking"
+    },
+    {
+      "id": "acc2",
+      "name": "High-Yield Savings",
+      "bank": "Goldman Sachs",
+      "currency": "USD",
+      "balance": 1500000,
+      "account_type": "high_yield"
+    }
+  ],
+  "forecast": [
+    {
+      "id": "f1",
+      "date": "2025-10-19",
+      "inflow": 500000,
+      "outflow": 350000,
+      "description": "Week 1 projection"
+    },
+    {
+      "id": "f2",
+      "date": "2025-10-20",
+      "inflow": 300000,
+      "outflow": 450000,
+      "description": "Week 1 projection"
+    },
+    {
+      "id": "f3",
+      "date": "2025-10-21",
+      "inflow": 600000,
+      "outflow": 400000,
+      "description": "Week 1 projection"
+    },
+    {
+      "id": "f4",
+      "date": "2025-10-22",
+      "inflow": 450000,
+      "outflow": 380000,
+      "description": "Week 1 projection"
+    },
+    {
+      "id": "f5",
+      "date": "2025-10-23",
+      "inflow": 550000,
+      "outflow": 420000,
+      "description": "Week 1 projection"
+    },
+    {
+      "id": "f6",
+      "date": "2025-10-24",
+      "inflow": 400000,
+      "outflow": 360000,
+      "description": "Week 1 projection"
+    },
+    {
+      "id": "f7",
+      "date": "2025-10-25",
+      "inflow": 480000,
+      "outflow": 390000,
+      "description": "Week 1 projection"
+    }
+  ],
+  "policy": {
+    "id": "pol1",
+    "name": "Standard Treasury Policy",
+    "min_liquidity": 1000000,
+    "invest_above": 500000,
+    "risk_profile": "balanced"
+  }
+}
