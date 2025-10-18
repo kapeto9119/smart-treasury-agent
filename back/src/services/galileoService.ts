@@ -1,16 +1,18 @@
-import { GalileoObserveWorkflow } from "@rungalileo/galileo";
+import { GalileoLogger } from "galileo";
 import { config } from "../config/env.js";
 
 class GalileoService {
   private apiKey: string;
   private projectName: string;
+  private logStreamName: string;
   private consoleUrl: string;
-  private observer: GalileoObserveWorkflow | null = null;
+  private logger: GalileoLogger | null = null;
   private isInitialized: boolean = false;
 
   constructor() {
     this.apiKey = config.galileo.apiKey || "";
     this.projectName = config.galileo.projectId || "smart-treasury-agent";
+    this.logStreamName = "scenario-recommendations";
     this.consoleUrl = config.galileo.consoleUrl || "https://console.galileo.ai";
 
     if (this.apiKey) {
@@ -25,13 +27,13 @@ class GalileoService {
     }
   }
 
-  private async ensureInitialized(): Promise<boolean> {
+  private ensureInitialized(): boolean {
     if (!this.apiKey) {
       console.warn("❌ Galileo API key is missing");
       return false;
     }
 
-    if (this.isInitialized && this.observer) {
+    if (this.isInitialized && this.logger) {
       return true;
     }
 
@@ -42,20 +44,20 @@ class GalileoService {
       process.env.GALILEO_CONSOLE_URL = this.consoleUrl;
 
       console.log(
-        `📊 Initializing Galileo with console URL: ${this.consoleUrl}`
+        `📊 Initializing Galileo Logger with project: ${this.projectName}, log stream: ${this.logStreamName}`
       );
 
-      // Initialize GalileoObserveWorkflow with project name only
-      this.observer = new GalileoObserveWorkflow(this.projectName);
+      // Initialize GalileoLogger with project and log stream names
+      this.logger = new GalileoLogger({
+        projectName: this.projectName,
+        logStreamName: this.logStreamName,
+      });
 
-      await this.observer.init();
       this.isInitialized = true;
-      console.log(
-        `📊 Galileo observer initialized for project: ${this.projectName}`
-      );
+      console.log(`📊 Galileo logger initialized successfully`);
       return true;
     } catch (error) {
-      console.error("❌ Failed to initialize Galileo observer:", error);
+      console.error("❌ Failed to initialize Galileo logger:", error);
       // Log more details about the error
       if (error instanceof Error) {
         console.error("Error details:", error.message);
@@ -73,53 +75,55 @@ class GalileoService {
     confidence: number,
     latencyMs: number
   ): Promise<void> {
-    const initialized = await this.ensureInitialized();
-    if (!initialized || !this.observer) {
+    const initialized = this.ensureInitialized();
+    if (!initialized || !this.logger) {
       console.debug("⚠️ Galileo not configured, skipping scenario monitoring");
       return;
     }
 
     try {
-      const now = Date.now() * 1_000_000; // Convert to nanoseconds
       const durationNs = latencyMs * 1_000_000; // Convert ms to nanoseconds
+      const now = new Date();
 
       console.log(`📊 Logging scenario ${scenarioId} to Galileo...`);
 
-      // Create a workflow for this scenario
-      this.observer.addWorkflow({
+      // Start a new trace for this scenario
+      this.logger.startTrace({
         input: claudeInput,
-        output: claudeOutput, // Set output immediately
-        createdAtNs: now,
-        durationNs: durationNs,
+        name: `Treasury Scenario ${scenarioId}`,
+        createdAt: now,
         metadata: {
           scenario_id: scenarioId,
           use_case: "treasury_recommendation",
           confidence: confidence.toString(),
-          latency_ms: latencyMs.toString(),
         },
-        parent: null,
-        steps: [],
+        tags: ["treasury", "scenario", "recommendation"],
       });
 
-      // Log the LLM step (Claude API call)
-      this.observer.addLlmStep({
+      // Add an LLM span for the Claude API call
+      this.logger.addLlmSpan({
         input: claudeInput,
         output: claudeOutput,
-        createdAtNs: now,
-        durationNs: durationNs,
         model: "claude-sonnet-4-20250514",
+        name: "Claude Recommendation",
+        durationNs: durationNs,
+        createdAt: now,
         metadata: {
           confidence: confidence.toString(),
           scenario_id: scenarioId,
           latency_ms: latencyMs.toString(),
         },
+        tags: ["llm", "claude", "recommendation"],
       });
 
-      // Conclude the workflow with the output
-      this.observer.concludeWorkflow(claudeOutput, durationNs);
+      // Conclude the trace
+      this.logger.conclude({
+        output: claudeOutput,
+        durationNs: durationNs,
+      });
 
-      // Upload to Galileo synchronously to ensure it completes
-      await this.observer.uploadWorkflows();
+      // Flush to Galileo
+      await this.logger.flush();
       console.log(`✅ Successfully logged scenario ${scenarioId} to Galileo`);
     } catch (error) {
       console.error(
@@ -135,16 +139,16 @@ class GalileoService {
   }
 
   async flush(): Promise<void> {
-    if (!this.observer || !this.isInitialized) {
-      console.debug("⚠️ Galileo observer not initialized, nothing to flush");
+    if (!this.logger || !this.isInitialized) {
+      console.debug("⚠️ Galileo logger not initialized, nothing to flush");
       return;
     }
 
     try {
-      await this.observer.uploadWorkflows();
-      console.log("✅ Flushed all Galileo workflows");
+      await this.logger.flush();
+      console.log("✅ Flushed all Galileo traces");
     } catch (error) {
-      console.error("❌ Failed to flush Galileo workflows:", error);
+      console.error("❌ Failed to flush Galileo traces:", error);
     }
   }
 }
