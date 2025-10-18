@@ -1,4 +1,4 @@
-import { GalileoLogger } from "galileo";
+import { init, getLogger, flush } from "galileo";
 import { config } from "../config/env.js";
 
 class GalileoService {
@@ -6,8 +6,8 @@ class GalileoService {
   private projectName: string;
   private logStreamName: string;
   private consoleUrl: string;
-  private logger: GalileoLogger | null = null;
   private isInitialized: boolean = false;
+  private sessionStarted: boolean = false;
 
   constructor() {
     this.apiKey = config.galileo.apiKey || "";
@@ -17,9 +17,10 @@ class GalileoService {
 
     if (this.apiKey) {
       console.log(
-        "✅ Galileo service initialized with project:",
+        "✅ Galileo service configured for project:",
         this.projectName
       );
+      this.initialize();
     } else {
       console.warn(
         "⚠️  Galileo API key not configured - logging will be skipped"
@@ -27,44 +28,50 @@ class GalileoService {
     }
   }
 
-  private ensureInitialized(): boolean {
-    if (!this.apiKey) {
-      console.warn("❌ Galileo API key is missing");
-      return false;
-    }
-
-    if (this.isInitialized && this.logger) {
-      return true;
+  private initialize(): void {
+    if (!this.apiKey || this.isInitialized) {
+      return;
     }
 
     try {
       // Set required environment variables for the Galileo SDK
-      // The SDK reads these from process.env automatically
       process.env.GALILEO_API_KEY = this.apiKey;
       process.env.GALILEO_CONSOLE_URL = this.consoleUrl;
 
       console.log(
-        `📊 Initializing Galileo Logger with project: ${this.projectName}, log stream: ${this.logStreamName}`
+        `📊 Initializing Galileo with project: ${this.projectName}, log stream: ${this.logStreamName}`
       );
 
-      // Initialize GalileoLogger with project and log stream names
-      this.logger = new GalileoLogger({
+      // Initialize Galileo using the singleton pattern
+      init({
         projectName: this.projectName,
         logStreamName: this.logStreamName,
       });
 
       this.isInitialized = true;
-      console.log(`📊 Galileo logger initialized successfully`);
-      return true;
+      console.log(`📊 Galileo initialized successfully`);
     } catch (error) {
-      console.error("❌ Failed to initialize Galileo logger:", error);
-      // Log more details about the error
+      console.error("❌ Failed to initialize Galileo:", error);
       if (error instanceof Error) {
         console.error("Error details:", error.message);
         console.error("Stack:", error.stack);
       }
       this.isInitialized = false;
-      return false;
+    }
+  }
+
+  private async ensureSessionStarted(): Promise<void> {
+    if (!this.isInitialized || this.sessionStarted) {
+      return;
+    }
+
+    try {
+      const logger = getLogger();
+      await logger.startSession();
+      this.sessionStarted = true;
+      console.log("📊 Galileo session started");
+    } catch (error) {
+      console.error("❌ Failed to start Galileo session:", error);
     }
   }
 
@@ -75,62 +82,51 @@ class GalileoService {
     confidence: number,
     latencyMs: number
   ): Promise<void> {
-    const initialized = this.ensureInitialized();
-    if (!initialized || !this.logger) {
+    if (!this.isInitialized) {
       console.debug("⚠️ Galileo not configured, skipping scenario monitoring");
       return;
     }
 
     try {
+      // Ensure session is started
+      await this.ensureSessionStarted();
+
+      const logger = getLogger();
       const durationNs = latencyMs * 1_000_000; // Convert ms to nanoseconds
-      const now = new Date();
 
       console.log(`📊 Logging scenario ${scenarioId} to Galileo...`);
 
-      // Start a new trace for this scenario
-      this.logger.startTrace({
-        input: claudeInput,
+      // Start a new trace for this scenario (following Anthropic pattern)
+      logger.startTrace({
         name: `Treasury Scenario ${scenarioId}`,
-        createdAt: now,
-        metadata: {
-          scenario_id: scenarioId,
-          use_case: "treasury_recommendation",
-          confidence: confidence.toString(),
-        },
-        tags: ["treasury", "scenario", "recommendation"],
+        input: claudeInput,
       });
 
       // Add an LLM span for the Claude API call
-      this.logger.addLlmSpan({
+      // Following the Anthropic example pattern
+      logger.addLlmSpan({
         input: claudeInput,
         output: claudeOutput,
         model: "claude-sonnet-4-20250514",
-        name: "Claude Recommendation",
         durationNs: durationNs,
-        createdAt: now,
         metadata: {
           confidence: confidence.toString(),
           scenario_id: scenarioId,
-          latency_ms: latencyMs.toString(),
+          use_case: "treasury_recommendation",
         },
-        tags: ["llm", "claude", "recommendation"],
       });
 
       // Conclude the trace
-      this.logger.conclude({
+      logger.conclude({
         output: claudeOutput,
-        durationNs: durationNs,
       });
 
-      // Flush to Galileo
-      await this.logger.flush();
-      console.log(`✅ Successfully logged scenario ${scenarioId} to Galileo`);
+      console.log(`✅ Logged scenario ${scenarioId} to Galileo`);
     } catch (error) {
       console.error(
         `❌ Failed to monitor scenario ${scenarioId} in Galileo:`,
         error
       );
-      // Log more details about the error
       if (error instanceof Error) {
         console.error("Error details:", error.message);
         console.error("Stack:", error.stack);
@@ -139,13 +135,14 @@ class GalileoService {
   }
 
   async flush(): Promise<void> {
-    if (!this.logger || !this.isInitialized) {
-      console.debug("⚠️ Galileo logger not initialized, nothing to flush");
+    if (!this.isInitialized) {
+      console.debug("⚠️ Galileo not initialized, nothing to flush");
       return;
     }
 
     try {
-      await this.logger.flush();
+      // Use the global flush function from the singleton
+      await flush();
       console.log("✅ Flushed all Galileo traces");
     } catch (error) {
       console.error("❌ Failed to flush Galileo traces:", error);
