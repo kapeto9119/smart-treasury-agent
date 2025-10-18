@@ -12,7 +12,10 @@ class GalileoService {
     this.projectName = config.galileo.projectId || "smart-treasury-agent";
 
     if (this.apiKey) {
-      console.log("✅ Galileo service initialized");
+      console.log(
+        "✅ Galileo service initialized with project:",
+        this.projectName
+      );
     } else {
       console.warn(
         "⚠️  Galileo API key not configured - logging will be skipped"
@@ -22,6 +25,7 @@ class GalileoService {
 
   private async ensureInitialized(): Promise<boolean> {
     if (!this.apiKey) {
+      console.warn("❌ Galileo API key is missing");
       return false;
     }
 
@@ -30,8 +34,13 @@ class GalileoService {
     }
 
     try {
-      // Initialize GalileoObserveWorkflow for production monitoring
+      // Set the API key in environment for the Galileo SDK
+      // The SDK reads from process.env.GALILEO_API_KEY automatically
+      process.env.GALILEO_API_KEY = this.apiKey;
+
+      // Initialize GalileoObserveWorkflow with project name only
       this.observer = new GalileoObserveWorkflow(this.projectName);
+
       await this.observer.init();
       this.isInitialized = true;
       console.log(
@@ -39,7 +48,12 @@ class GalileoService {
       );
       return true;
     } catch (error) {
-      console.error("Failed to initialize Galileo observer:", error);
+      console.error("❌ Failed to initialize Galileo observer:", error);
+      // Log more details about the error
+      if (error instanceof Error) {
+        console.error("Error details:", error.message);
+        console.error("Stack:", error.stack);
+      }
       this.isInitialized = false;
       return false;
     }
@@ -54,7 +68,7 @@ class GalileoService {
   ): Promise<void> {
     const initialized = await this.ensureInitialized();
     if (!initialized || !this.observer) {
-      console.debug("Galileo not configured, skipping scenario monitoring");
+      console.debug("⚠️ Galileo not configured, skipping scenario monitoring");
       return;
     }
 
@@ -62,16 +76,19 @@ class GalileoService {
       const now = Date.now() * 1_000_000; // Convert to nanoseconds
       const durationNs = latencyMs * 1_000_000; // Convert ms to nanoseconds
 
+      console.log(`📊 Logging scenario ${scenarioId} to Galileo...`);
+
       // Create a workflow for this scenario
       this.observer.addWorkflow({
         input: claudeInput,
-        output: "", // Will be set when we conclude
+        output: claudeOutput, // Set output immediately
         createdAtNs: now,
         durationNs: durationNs,
         metadata: {
           scenario_id: scenarioId,
           use_case: "treasury_recommendation",
           confidence: confidence.toString(),
+          latency_ms: latencyMs.toString(),
         },
         parent: null,
         steps: [],
@@ -87,36 +104,40 @@ class GalileoService {
         metadata: {
           confidence: confidence.toString(),
           scenario_id: scenarioId,
+          latency_ms: latencyMs.toString(),
         },
       });
 
-      // Conclude the workflow
+      // Conclude the workflow with the output
       this.observer.concludeWorkflow(claudeOutput, durationNs);
 
-      // Upload to Galileo (async, don't block)
-      this.observer
-        .uploadWorkflows()
-        .then(() => {
-          console.log(`📊 Logged scenario ${scenarioId} to Galileo`);
-        })
-        .catch((err: any) => {
-          console.error("Failed to upload workflow to Galileo:", err);
-        });
+      // Upload to Galileo synchronously to ensure it completes
+      await this.observer.uploadWorkflows();
+      console.log(`✅ Successfully logged scenario ${scenarioId} to Galileo`);
     } catch (error) {
-      console.error("Failed to monitor scenario in Galileo:", error);
+      console.error(
+        `❌ Failed to monitor scenario ${scenarioId} in Galileo:`,
+        error
+      );
+      // Log more details about the error
+      if (error instanceof Error) {
+        console.error("Error details:", error.message);
+        console.error("Stack:", error.stack);
+      }
     }
   }
 
   async flush(): Promise<void> {
     if (!this.observer || !this.isInitialized) {
+      console.debug("⚠️ Galileo observer not initialized, nothing to flush");
       return;
     }
 
     try {
       await this.observer.uploadWorkflows();
-      console.log("📊 Flushed all Galileo workflows");
+      console.log("✅ Flushed all Galileo workflows");
     } catch (error) {
-      console.error("Failed to flush Galileo workflows:", error);
+      console.error("❌ Failed to flush Galileo workflows:", error);
     }
   }
 }
