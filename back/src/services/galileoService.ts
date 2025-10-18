@@ -4,12 +4,15 @@ import { config } from "../config/env.js";
 class GalileoService {
   private apiKey: string;
   private projectName: string;
+  private consoleUrl: string;
   private observer: GalileoObserveWorkflow | null = null;
   private isInitialized: boolean = false;
 
   constructor() {
     this.apiKey = config.galileo.apiKey || "";
     this.projectName = config.galileo.projectId || "smart-treasury-agent";
+    this.consoleUrl =
+      config.galileo.consoleUrl || "https://console.rungalileo.io";
 
     if (this.apiKey) {
       console.log(
@@ -34,9 +37,14 @@ class GalileoService {
     }
 
     try {
-      // Set the API key in environment for the Galileo SDK
-      // The SDK reads from process.env.GALILEO_API_KEY automatically
+      // Set required environment variables for the Galileo SDK
+      // The SDK reads these from process.env automatically
       process.env.GALILEO_API_KEY = this.apiKey;
+      process.env.GALILEO_CONSOLE_URL = this.consoleUrl;
+
+      console.log(
+        `📊 Initializing Galileo with console URL: ${this.consoleUrl}`
+      );
 
       // Initialize GalileoObserveWorkflow with project name only
       this.observer = new GalileoObserveWorkflow(this.projectName);
