@@ -8,12 +8,18 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Required - Daytona
       - DAYTONA_API_KEY=${DAYTONA_API_KEY}
       - DAYTONA_API_URL=${DAYTONA_API_URL:-https://app.daytona.io/api}
       - DAYTONA_TARGET=${DAYTONA_TARGET:-us}
+      # Required - Anthropic (for AI agent in sandbox)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Optional - Service Configuration
       - PORT=8000
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - AUTO_CLEANUP=${AUTO_CLEANUP:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SIMULATION_TIMEOUT=${SIMULATION_TIMEOUT:-240}
+      - AUTO_CLEANUP=${AUTO_CLEANUP:-true}
+      - DAYTONA_AUTOSTOP_MINUTES=${DAYTONA_AUTOSTOP_MINUTES:-10}
     volumes:
       - ./python-ms:/app
     restart: unless-stopped
