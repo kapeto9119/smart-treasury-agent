@@ -203,31 +203,34 @@ export default function ScenarioDetailPage({
                   </CardContent>
                 </Card>
 
-                {/* AI Agent Analysis - NEW! */}
-                {scenario.metrics.agent && (
+                {/* AI Agent Analysis - Show agent card if available, otherwise show simple recommendation */}
+                {scenario.metrics.agent ? (
                   <AgentAnalysisCard
                     agent={scenario.metrics.agent}
                     mode={scenario.mode}
                   />
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>
+                        <TrendingUp className="w-5 h-5 inline mr-2" />
+                        Recommended Action
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-lg text-gray-900 dark:text-gray-100 font-medium mb-4">
+                        {scenario.recommendation ||
+                          scenario.metrics.recommendation}
+                      </p>
+                    </CardContent>
+                  </Card>
                 )}
 
-                {/* Recommendation */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <TrendingUp className="w-5 h-5 inline mr-2" />
-                      Recommended Action
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-lg text-gray-900 dark:text-gray-100 font-medium mb-4">
-                      {scenario.recommendation ||
-                        scenario.metrics.recommendation}
-                    </p>
-                  </CardContent>
-                  {scenario.metrics.transferDetails &&
-                    scenario.metrics.transferDetails.amount > 0 && (
-                      <CardFooter>
+                {/* Execute Transfer Button */}
+                {scenario.metrics.transferDetails &&
+                  scenario.metrics.transferDetails.amount > 0 && (
+                    <Card>
+                      <CardContent className="pt-6">
                         <Button
                           onClick={() => {
                             setExecuting(true);
@@ -245,137 +248,167 @@ export default function ScenarioDetailPage({
                             scenario.metrics.transferDetails.amount
                           )}
                         </Button>
-                      </CardFooter>
-                    )}
-                </Card>
+                      </CardContent>
+                    </Card>
+                  )}
 
-                {/* AI Analysis - Smart Component Detection */}
-                {scenario.claude_response && (() => {
-                  // Try to parse as JSON to detect debate or workflow
-                  try {
-                    const parsed = JSON.parse(scenario.claude_response);
-
-                    // Check for workflow (array of steps)
-                    if (Array.isArray(parsed)) {
-                      return (
-                        <Card>
-                          <CardContent className="pt-6">
-                            <WorkflowTimeline
-                              workflow={parsed}
-                              finalRecommendation={scenario.recommendation || ""}
-                              confidence={evalLogs[0]?.confidence || 0.85}
-                            />
-                          </CardContent>
-                        </Card>
-                      );
-                    }
-
-                    // Check for debate (has debate, conservative, or aggressive fields)
-                    if (parsed.debate || parsed.conservative || parsed.aggressive) {
-                      const debateData = parsed.debate || parsed;
-                      return (
-                        <Card>
-                          <CardContent className="pt-6">
-                            <DebateViewer
-                              debate={debateData}
-                              finalRecommendation={scenario.recommendation || ""}
-                              finalConfidence={evalLogs[0]?.confidence || 0.85}
-                            />
-                          </CardContent>
-                        </Card>
-                      );
-                    }
-                  } catch (e) {
-                    // Not JSON - continue to text parsing
-                  }
-
-                  // Check for multi-line JSON with DEBATE marker
-                  if (scenario.claude_response.includes("=== MULTI-AGENT DEBATE ===")) {
+                {/* AI Analysis - Smart Component Detection (only show if no agent analysis) */}
+                {!scenario.metrics.agent &&
+                  scenario.claude_response &&
+                  (() => {
+                    // Try to parse as JSON to detect debate or workflow
                     try {
-                      const parts = scenario.claude_response.split("=== MULTI-AGENT DEBATE ===");
-                      const rationale = parts[0].trim();
-                      const debateJson = parts[1].trim();
-                      const parsed = JSON.parse(debateJson);
-                      
-                      return (
-                        <div className="space-y-4">
-                          {rationale && (
-                            <Card>
-                              <CardHeader>
-                                <CardTitle className="text-lg">
-                                  AI Rationale
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                                  {rationale}
-                                </p>
-                              </CardContent>
-                            </Card>
-                          )}
+                      const parsed = JSON.parse(scenario.claude_response);
+
+                      // Check for workflow (array of steps)
+                      if (Array.isArray(parsed)) {
+                        return (
                           <Card>
                             <CardContent className="pt-6">
-                              <DebateViewer
-                                debate={parsed}
-                                finalRecommendation={scenario.recommendation || ""}
-                                finalConfidence={evalLogs[0]?.confidence || 0.85}
+                              <WorkflowTimeline
+                                workflow={parsed}
+                                finalRecommendation={
+                                  scenario.recommendation || ""
+                                }
+                                confidence={evalLogs[0]?.confidence || 0.85}
                               />
                             </CardContent>
                           </Card>
-                        </div>
-                      );
+                        );
+                      }
+
+                      // Check for debate (has debate, conservative, or aggressive fields)
+                      if (
+                        parsed.debate ||
+                        parsed.conservative ||
+                        parsed.aggressive
+                      ) {
+                        const debateData = parsed.debate || parsed;
+                        return (
+                          <Card>
+                            <CardContent className="pt-6">
+                              <DebateViewer
+                                debate={debateData}
+                                finalRecommendation={
+                                  scenario.recommendation || ""
+                                }
+                                finalConfidence={
+                                  evalLogs[0]?.confidence || 0.85
+                                }
+                              />
+                            </CardContent>
+                          </Card>
+                        );
+                      }
                     } catch (e) {
-                      // Fallback to text
+                      // Not JSON - continue to text parsing
                     }
-                  }
 
-                  // Check for Historical Learning markers
-                  const hasLearning = scenario.claude_response.includes("[Historical Learning:");
-                  let learningReason = "";
-                  let originalText = scenario.claude_response;
+                    // Check for multi-line JSON with DEBATE marker
+                    if (
+                      scenario.claude_response.includes(
+                        "=== MULTI-AGENT DEBATE ==="
+                      )
+                    ) {
+                      try {
+                        const parts = scenario.claude_response.split(
+                          "=== MULTI-AGENT DEBATE ==="
+                        );
+                        const rationale = parts[0].trim();
+                        const debateJson = parts[1].trim();
+                        const parsed = JSON.parse(debateJson);
 
-                  if (hasLearning) {
-                    const match = scenario.claude_response.match(/\[Historical Learning: ([^\]]+)\]/);
-                    if (match) {
-                      learningReason = match[1];
-                      originalText = scenario.claude_response.replace(match[0], "").trim();
-                    }
-                  }
-
-                  // Standard text response
-                  return (
-                    <div className="space-y-4">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg flex items-center gap-2">
-                            <TrendingUp className="w-5 h-5" />
-                            AI Analysis & Rationale
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="prose prose-sm max-w-none dark:prose-invert">
-                            <pre className="whitespace-pre-wrap bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">
-                              {originalText}
-                            </pre>
+                        return (
+                          <div className="space-y-4">
+                            {rationale && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle className="text-lg">
+                                    AI Rationale
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                                    {rationale}
+                                  </p>
+                                </CardContent>
+                              </Card>
+                            )}
+                            <Card>
+                              <CardContent className="pt-6">
+                                <DebateViewer
+                                  debate={parsed}
+                                  finalRecommendation={
+                                    scenario.recommendation || ""
+                                  }
+                                  finalConfidence={
+                                    evalLogs[0]?.confidence || 0.85
+                                  }
+                                />
+                              </CardContent>
+                            </Card>
                           </div>
-                        </CardContent>
-                      </Card>
+                        );
+                      } catch (e) {
+                        // Fallback to text
+                      }
+                    }
 
-                      {/* Historical Learning Card */}
-                      {hasLearning && learningReason && (
+                    // Check for Historical Learning markers
+                    const hasLearning = scenario.claude_response.includes(
+                      "[Historical Learning:"
+                    );
+                    let learningReason = "";
+                    let originalText = scenario.claude_response;
+
+                    if (hasLearning) {
+                      const match = scenario.claude_response.match(
+                        /\[Historical Learning: ([^\]]+)\]/
+                      );
+                      if (match) {
+                        learningReason = match[1];
+                        originalText = scenario.claude_response
+                          .replace(match[0], "")
+                          .trim();
+                      }
+                    }
+
+                    // Standard text response
+                    return (
+                      <div className="space-y-4">
                         <Card>
-                          <CardContent className="pt-6">
-                            <HistoricalInsights
-                              adjustmentReason={learningReason}
-                              originalConfidence={0.85}
-                              adjustedConfidence={evalLogs[0]?.confidence || 0.85}
-                            />
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <TrendingUp className="w-5 h-5" />
+                              AI Analysis & Rationale
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="prose prose-sm max-w-none dark:prose-invert">
+                              <pre className="whitespace-pre-wrap bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">
+                                {originalText}
+                              </pre>
+                            </div>
                           </CardContent>
                         </Card>
-                      )}
-                    </div>
-                  );
-                })()}
+
+                        {/* Historical Learning Card */}
+                        {hasLearning && learningReason && (
+                          <Card>
+                            <CardContent className="pt-6">
+                              <HistoricalInsights
+                                adjustmentReason={learningReason}
+                                originalConfidence={0.85}
+                                adjustedConfidence={
+                                  evalLogs[0]?.confidence || 0.85
+                                }
+                              />
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    );
+                  })()}
               </>
             ) : (
               <Card>
