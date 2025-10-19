@@ -58,6 +58,7 @@ export interface SimulationMetrics {
   estYieldBps: number;
   shortfallRiskPct: number;
   recommendation: string;
+  agent?: AgentAnalysis; // Agent analysis if available
 }
 
 export interface Transfer {
@@ -101,6 +102,16 @@ export interface SimulationInput {
   parameters?: ScenarioParameters;
 }
 
+export interface AgentAnalysis {
+  recommendation: string;
+  reasoning: string;
+  riskAssessment: string;
+  confidence: number;
+  agentEnabled: boolean;
+  rawResponse?: string;
+  error?: string;
+}
+
 export interface SimulationOutput {
   idleCashPct: number;
   liquidityCoverageDays: number;
@@ -113,6 +124,7 @@ export interface SimulationOutput {
     amount: number;
   };
   sandbox_id?: string;
+  agent?: AgentAnalysis; // Agent analysis from inside sandbox
 }
 
 export interface FXRate {

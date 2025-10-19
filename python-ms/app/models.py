@@ -75,6 +75,20 @@ class TransferDetails(BaseModel):
         populate_by_name = True
 
 
+class AgentAnalysis(BaseModel):
+    """Agent analysis results from LLM running inside sandbox"""
+    recommendation: str
+    reasoning: str
+    risk_assessment: str = Field(alias="riskAssessment")
+    confidence: float
+    agent_enabled: bool = Field(alias="agentEnabled")
+    raw_response: Optional[str] = Field(alias="rawResponse", default=None)
+    error: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
+
+
 class SimulationResponse(BaseModel):
     idle_cash_pct: float = Field(alias="idleCashPct")
     liquidity_coverage_days: float = Field(alias="liquidityCoverageDays")
@@ -83,6 +97,7 @@ class SimulationResponse(BaseModel):
     recommendation: str
     transfer_details: TransferDetails = Field(alias="transferDetails")
     sandbox_id: Optional[str] = None
+    agent: Optional[AgentAnalysis] = None  # Agent analysis from inside sandbox
 
     class Config:
         populate_by_name = True

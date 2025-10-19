@@ -36,6 +36,7 @@ import {
   Sparkles,
   BarChart3,
   Clock,
+  Brain,
 } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
@@ -432,6 +433,18 @@ export default function Dashboard() {
                                           scenario.metrics.idleCashPct
                                         )}
                                       </span>
+                                    )}
+                                    {scenario.metrics?.agent?.agentEnabled && (
+                                      <div className="flex items-center space-x-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded-md">
+                                        <Brain className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                                        <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                                          {(
+                                            scenario.metrics.agent.confidence *
+                                            100
+                                          ).toFixed(0)}
+                                          %
+                                        </span>
+                                      </div>
                                     )}
                                   </div>
                                 </div>

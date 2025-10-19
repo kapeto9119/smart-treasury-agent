@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatPercent, getStatusColor } from "@/lib/utils";
 import Link from "next/link";
-import { ArrowLeft, TrendingUp } from "lucide-react";
+import { ArrowLeft, TrendingUp, Brain, Sparkles } from "lucide-react";
 
 export default function ScenariosPage() {
   const { data: scenarios = [], isLoading } = useQuery({
@@ -53,8 +53,11 @@ export default function ScenariosPage() {
               <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="capitalize">
+                    <CardTitle className="capitalize flex items-center gap-2">
                       {scenario.mode}
+                      {scenario.metrics?.agent?.agentEnabled && (
+                        <Sparkles className="w-4 h-4 text-purple-500" title="AI Agent Analysis Available" />
+                      )}
                     </CardTitle>
                     <Badge className={getStatusColor(scenario.status)}>
                       {scenario.status}
@@ -64,6 +67,15 @@ export default function ScenariosPage() {
                 <CardContent>
                   {scenario.metrics ? (
                     <div className="space-y-3">
+                      {/* Agent Confidence Badge */}
+                      {scenario.metrics.agent?.agentEnabled && (
+                        <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg border border-purple-200">
+                          <Brain className="w-4 h-4 text-purple-600" />
+                          <span className="text-xs font-medium text-purple-700">
+                            AI Confidence: {(scenario.metrics.agent.confidence * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600">Idle Cash</span>
                         <span className="font-semibold">

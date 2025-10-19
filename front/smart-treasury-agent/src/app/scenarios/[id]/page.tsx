@@ -29,6 +29,7 @@ import { use, useState } from "react";
 import DebateViewer from "@/components/ui/DebateViewer";
 import WorkflowTimeline from "@/components/ui/WorkflowTimeline";
 import HistoricalInsights from "@/components/ui/HistoricalInsights";
+import AgentAnalysisCard from "@/components/ui/AgentAnalysisCard";
 
 export default function ScenarioDetailPage({
   params,
@@ -201,6 +202,14 @@ export default function ScenarioDetailPage({
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* AI Agent Analysis - NEW! */}
+                {scenario.metrics.agent && (
+                  <AgentAnalysisCard
+                    agent={scenario.metrics.agent}
+                    mode={scenario.mode}
+                  />
+                )}
 
                 {/* Recommendation */}
                 <Card>

@@ -1,6 +1,8 @@
-"""Treasury simulation logic"""
+"""Treasury simulation logic with embedded agent analysis"""
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+import os
+import re
 from .models import (
     Account,
     ForecastItem,
@@ -149,3 +151,155 @@ def calculate_metrics(
             amount=round(transfer_amount, 2),
         ),
     )
+
+
+def run_agent_analysis(
+    metrics: Dict[str, Any],
+    mode: str,
+    accounts: List[Account],
+    policy: Policy,
+    forecast: List[ForecastItem],
+) -> Dict[str, Any]:
+    """
+    Run LLM agent analysis on calculated metrics.
+    This function is designed to run INSIDE the Daytona sandbox.
+
+    Args:
+        metrics: Calculated simulation metrics
+        mode: Simulation mode (conservative/balanced/aggressive)
+        accounts: List of bank accounts
+        policy: Treasury policy settings
+        forecast: Cash flow forecast
+
+    Returns:
+        Dict with agent's recommendation, reasoning, risk assessment, and confidence
+    """
+    try:
+        # Import anthropic inside function (will be available in sandbox)
+        from anthropic import Anthropic
+
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            return {
+                "recommendation": metrics.get("recommendation", ""),
+                "reasoning": "Agent analysis skipped - no API key provided",
+                "risk_assessment": "UNKNOWN",
+                "confidence": 0.5,
+                "agent_enabled": False,
+            }
+
+        # Initialize Claude client
+        client = Anthropic(api_key=api_key)
+
+        # Calculate context
+        total_cash = sum(acc.balance for acc in accounts)
+        next_7_days = forecast[:7] if len(forecast) >= 7 else forecast
+        total_inflow = sum(f.inflow for f in next_7_days)
+        total_outflow = sum(f.outflow for f in next_7_days)
+        net_position = total_inflow - total_outflow
+
+        # Build comprehensive prompt
+        prompt = f"""You are an AI treasury agent running inside a secure sandbox environment. You just completed a treasury simulation and need to provide expert analysis.
+
+**SIMULATION MODE:** {mode.upper()}
+
+**CALCULATED METRICS:**
+- Idle Cash: {metrics['idleCashPct']}%
+- Liquidity Coverage: {metrics['liquidityCoverageDays']} days
+- Estimated Yield: {metrics['estYieldBps']} basis points
+- Shortfall Risk: {metrics['shortfallRiskPct']}%
+- Transfer Amount: ${metrics['transferDetails']['amount']:,.0f}
+
+**ACCOUNT CONTEXT:**
+Total Cash Position: ${total_cash:,.0f}
+{chr(10).join([f"- {acc.name} ({acc.account_type}): ${acc.balance:,.0f}" for acc in accounts])}
+
+**TREASURY POLICY:**
+- Minimum Liquidity Required: ${policy.min_liquidity:,.0f}
+- Invest Above Threshold: ${policy.invest_above:,.0f}
+- Risk Profile: {policy.risk_profile}
+
+**7-DAY FORECAST:**
+- Expected Inflows: ${total_inflow:,.0f}
+- Expected Outflows: ${total_outflow:,.0f}
+- Net Position: ${net_position:,.0f}
+
+**YOUR TASK:**
+As an embedded treasury agent, analyze these metrics and provide:
+
+1. **RECOMMENDATION:** A clear, actionable recommendation (1-2 sentences)
+2. **REASONING:** Detailed explanation of your analysis, including:
+   - Why this recommendation makes sense given the metrics
+   - How it aligns with the {mode} strategy
+   - Any market or timing considerations
+3. **RISK_ASSESSMENT:** Rate the risk level (LOW/MEDIUM/HIGH) and explain why
+4. **CONFIDENCE:** Your confidence score (0.0 to 1.0) in this recommendation
+
+Format your response EXACTLY as:
+RECOMMENDATION: [your recommendation]
+REASONING: [your detailed reasoning]
+RISK_ASSESSMENT: [LOW/MEDIUM/HIGH] - [explanation]
+CONFIDENCE: [0.0-1.0]"""
+
+        # Call Claude
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+            system="You are an expert treasury analyst AI agent embedded in a simulation sandbox. Provide precise, data-driven analysis.",
+        )
+
+        # Parse response
+        text = response.content[0].text if response.content else ""
+
+        # Extract components using regex
+        recommendation_match = re.search(
+            r"RECOMMENDATION:\s*(.+?)(?=REASONING:|$)", text, re.DOTALL
+        )
+        reasoning_match = re.search(
+            r"REASONING:\s*(.+?)(?=RISK_ASSESSMENT:|$)", text, re.DOTALL
+        )
+        risk_match = re.search(
+            r"RISK_ASSESSMENT:\s*(.+?)(?=CONFIDENCE:|$)", text, re.DOTALL
+        )
+        confidence_match = re.search(r"CONFIDENCE:\s*([\d.]+)", text)
+
+        recommendation = (
+            recommendation_match.group(1).strip()
+            if recommendation_match
+            else metrics.get("recommendation", "")
+        )
+        reasoning = (
+            reasoning_match.group(1).strip()
+            if reasoning_match
+            else "Analysis completed based on calculated metrics."
+        )
+        risk_assessment = (
+            risk_match.group(1).strip()
+            if risk_match
+            else "MEDIUM - Standard risk profile"
+        )
+        confidence = float(confidence_match.group(1)) if confidence_match else 0.75
+
+        # Ensure confidence is between 0 and 1
+        confidence = max(0.0, min(1.0, confidence))
+
+        return {
+            "recommendation": recommendation,
+            "reasoning": reasoning,
+            "risk_assessment": risk_assessment,
+            "confidence": confidence,
+            "agent_enabled": True,
+            "raw_response": text,
+        }
+
+    except Exception as e:
+        # Fallback if agent fails
+        return {
+            "recommendation": metrics.get("recommendation", ""),
+            "reasoning": f"Agent analysis failed: {str(e)}. Using calculated metrics only.",
+            "risk_assessment": "UNKNOWN",
+            "confidence": 0.5,
+            "agent_enabled": False,
+            "error": str(e),
+        }

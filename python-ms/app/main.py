@@ -14,8 +14,9 @@ from .models import (
     SimulationResponse,
     ParallelSimulationRequest,
     ParallelSimulationResponse,
+    AgentAnalysis,
 )
-from .simulation import calculate_metrics
+from .simulation import calculate_metrics, run_agent_analysis
 from .daytona_client import DaytonaClient
 import inspect
 
@@ -35,22 +36,26 @@ SIMULATION_TIMEOUT = int(os.getenv("SIMULATION_TIMEOUT", "240"))  # 4 minutes de
 
 def generate_simulation_code() -> str:
     """
-    Generate standalone simulation code from the calculate_metrics function.
+    Generate standalone simulation code with embedded LLM agent.
     This ensures the sandbox code stays in sync with the local simulation logic.
+    Now includes agent analysis capability!
     """
-    # Get the source code of the calculate_metrics function
-    func_source = inspect.getsource(calculate_metrics)
+    # Get the source code of both functions
+    calc_source = inspect.getsource(calculate_metrics)
+    agent_source = inspect.getsource(run_agent_analysis)
 
-    # Create a standalone script that can run in Daytona
+    # Create a standalone script that can run in Daytona WITH AGENT
     return f'''#!/usr/bin/env python3
 """
-Smart Treasury Agent - Simulation Runner
+Smart Treasury Agent - Simulation Runner with Embedded LLM Agent
 Auto-generated from simulation.py - DO NOT EDIT MANUALLY
-Calculates treasury metrics based on different strategic modes
+Calculates treasury metrics AND runs AI agent analysis inside the sandbox
 """
 
 import json
 import sys
+import os
+import re
 from typing import List, Dict, Any
 
 
@@ -177,27 +182,169 @@ def calculate_metrics_standalone(data: Dict[str, Any]) -> Dict[str, Any]:
     }}
 
 
+def run_agent_analysis_standalone(
+    metrics: Dict[str, Any],
+    mode: str,
+    accounts: List[Dict[str, Any]],
+    policy: Dict[str, Any],
+    forecast: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Run LLM agent analysis on calculated metrics.
+    This runs INSIDE the Daytona sandbox with the agent!
+    """
+    try:
+        from anthropic import Anthropic
+        
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            print("⚠️  No ANTHROPIC_API_KEY found - skipping agent analysis")
+            return {{
+                "recommendation": metrics.get("recommendation", ""),
+                "reasoning": "Agent analysis skipped - no API key provided",
+                "riskAssessment": "UNKNOWN",
+                "confidence": 0.5,
+                "agentEnabled": False
+            }}
+        
+        print("🤖 Initializing AI agent for analysis...")
+        client = Anthropic(api_key=api_key)
+        
+        # Calculate context
+        total_cash = sum(acc["balance"] for acc in accounts)
+        next_7_days = forecast[:7] if len(forecast) >= 7 else forecast
+        total_inflow = sum(f["inflow"] for f in next_7_days)
+        total_outflow = sum(f["outflow"] for f in next_7_days)
+        net_position = total_inflow - total_outflow
+        
+        # Build comprehensive prompt
+        prompt = f"""You are an AI treasury agent running inside a secure sandbox environment. You just completed a treasury simulation and need to provide expert analysis.
+
+**SIMULATION MODE:** {{mode.upper()}}
+
+**CALCULATED METRICS:**
+- Idle Cash: {{metrics['idleCashPct']}}%
+- Liquidity Coverage: {{metrics['liquidityCoverageDays']}} days
+- Estimated Yield: {{metrics['estYieldBps']}} basis points
+- Shortfall Risk: {{metrics['shortfallRiskPct']}}%
+- Transfer Amount: ${{metrics['transferDetails']['amount']:,.0f}}
+
+**ACCOUNT CONTEXT:**
+Total Cash Position: ${{total_cash:,.0f}}
+{{chr(10).join([f"- {{acc['name']}} ({{acc['account_type']}}): ${{acc['balance']:,.0f}}" for acc in accounts])}}
+
+**TREASURY POLICY:**
+- Minimum Liquidity Required: ${{policy['min_liquidity']:,.0f}}
+- Invest Above Threshold: ${{policy['invest_above']:,.0f}}
+- Risk Profile: {{policy['risk_profile']}}
+
+**7-DAY FORECAST:**
+- Expected Inflows: ${{total_inflow:,.0f}}
+- Expected Outflows: ${{total_outflow:,.0f}}
+- Net Position: ${{net_position:,.0f}}
+
+**YOUR TASK:**
+As an embedded treasury agent, analyze these metrics and provide:
+
+1. **RECOMMENDATION:** A clear, actionable recommendation (1-2 sentences)
+2. **REASONING:** Detailed explanation of your analysis
+3. **RISK_ASSESSMENT:** Rate the risk level (LOW/MEDIUM/HIGH) and explain why
+4. **CONFIDENCE:** Your confidence score (0.0 to 1.0) in this recommendation
+
+Format your response EXACTLY as:
+RECOMMENDATION: [your recommendation]
+REASONING: [your detailed reasoning]
+RISK_ASSESSMENT: [LOW/MEDIUM/HIGH] - [explanation]
+CONFIDENCE: [0.0-1.0]"""
+
+        print("🤖 Agent analyzing simulation results...")
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=[{{"role": "user", "content": prompt}}],
+            system="You are an expert treasury analyst AI agent embedded in a simulation sandbox. Provide precise, data-driven analysis."
+        )
+        
+        text = response.content[0].text if response.content else ""
+        print("✅ Agent analysis completed")
+        
+        # Extract components using regex
+        recommendation_match = re.search(r'RECOMMENDATION:\\s*(.+?)(?=REASONING:|$)', text, re.DOTALL)
+        reasoning_match = re.search(r'REASONING:\\s*(.+?)(?=RISK_ASSESSMENT:|$)', text, re.DOTALL)
+        risk_match = re.search(r'RISK_ASSESSMENT:\\s*(.+?)(?=CONFIDENCE:|$)', text, re.DOTALL)
+        confidence_match = re.search(r'CONFIDENCE:\\s*([\\d.]+)', text)
+        
+        recommendation = recommendation_match.group(1).strip() if recommendation_match else metrics.get("recommendation", "")
+        reasoning = reasoning_match.group(1).strip() if reasoning_match else "Analysis completed based on calculated metrics."
+        risk_assessment = risk_match.group(1).strip() if risk_match else "MEDIUM - Standard risk profile"
+        confidence = float(confidence_match.group(1)) if confidence_match else 0.75
+        confidence = max(0.0, min(1.0, confidence))
+        
+        return {{
+            "recommendation": recommendation,
+            "reasoning": reasoning,
+            "riskAssessment": risk_assessment,
+            "confidence": confidence,
+            "agentEnabled": True,
+            "rawResponse": text
+        }}
+        
+    except Exception as e:
+        print(f"❌ Agent analysis failed: {{str(e)}}")
+        import traceback
+        traceback.print_exc()
+        return {{
+            "recommendation": metrics.get("recommendation", ""),
+            "reasoning": f"Agent analysis failed: {{str(e)}}. Using calculated metrics only.",
+            "riskAssessment": "UNKNOWN",
+            "confidence": 0.5,
+            "agentEnabled": False,
+            "error": str(e)
+        }}
+
+
 def main():
-    """Main execution function"""
+    """Main execution function with agent analysis"""
     try:
         # Read input file
         with open("input.json", "r") as f:
             input_data = json.load(f)
 
-        print(f"Processing simulation for mode: {{input_data.get('mode', 'unknown')}}")
+        mode = input_data.get('mode', 'unknown')
+        print(f"🧮 Processing simulation for mode: {{mode}}")
 
-        # Calculate metrics
-        results = calculate_metrics_standalone(input_data)
+        # Step 1: Calculate metrics
+        metrics = calculate_metrics_standalone(input_data)
+        print(f"✅ Metrics calculated: {{metrics['idleCashPct']}}% idle cash, {{metrics['liquidityCoverageDays']}} days coverage")
+
+        # Step 2: Run agent analysis (if API key available)
+        agent_analysis = run_agent_analysis_standalone(
+            metrics,
+            mode,
+            input_data["accounts"],
+            input_data["policy"],
+            input_data["forecast"]
+        )
+
+        # Step 3: Combine results
+        final_results = {{
+            **metrics,
+            "agent": agent_analysis
+        }}
 
         # Write output file
         with open("results.json", "w") as f:
-            json.dump(results, f, indent=2)
+            json.dump(final_results, f, indent=2)
 
-        print("Simulation completed successfully")
+        if agent_analysis.get("agentEnabled"):
+            print(f"✅ Simulation + Agent analysis completed (confidence: {{agent_analysis['confidence']}})")
+        else:
+            print("✅ Simulation completed (agent analysis skipped)")
+        
         sys.exit(0)
 
     except Exception as e:
-        print(f"Error: {{str(e)}}", file=sys.stderr)
+        print(f"❌ Error: {{str(e)}}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         sys.exit(1)
@@ -288,10 +435,35 @@ async def _run_simulation_internal(request: SimulationRequest) -> SimulationResp
 
         await daytona_client.upload_file(workspace_id, "sim_runner.py", SIM_CODE)
 
-        # Execute simulation
-        logger.info(f"⚙️  Executing simulation in workspace {workspace_id}")
+        # Set environment variables in sandbox (including API key for agent)
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if anthropic_key:
+            logger.info(f"🔑 Setting ANTHROPIC_API_KEY in sandbox for agent analysis")
+            # Set the API key as an environment variable in the sandbox
+            await daytona_client.execute_command(
+                workspace_id, f'export ANTHROPIC_API_KEY="{anthropic_key}"'
+            )
+        else:
+            logger.warning(
+                "⚠️  No ANTHROPIC_API_KEY found - agent analysis will be skipped"
+            )
+
+        # Install anthropic package in sandbox
+        logger.info(f"📦 Installing anthropic SDK in sandbox")
+        install_result = await daytona_client.execute_command(
+            workspace_id, "pip install anthropic==0.39.0 -q"
+        )
+        if install_result["exitCode"] != 0:
+            logger.warning(
+                f"⚠️  Failed to install anthropic SDK: {install_result['output']}"
+            )
+
+        # Execute simulation with agent
+        logger.info(
+            f"⚙️  Executing simulation with embedded agent in workspace {workspace_id}"
+        )
         exec_result = await daytona_client.execute_command(
-            workspace_id, "python3 sim_runner.py"
+            workspace_id, f'ANTHROPIC_API_KEY="{anthropic_key}" python3 sim_runner.py'
         )
 
         if exec_result["exitCode"] != 0:
@@ -314,7 +486,22 @@ async def _run_simulation_internal(request: SimulationRequest) -> SimulationResp
 
         # Validate using Pydantic model
         try:
-            response = SimulationResponse(**results, sandbox_id=workspace_id)
+            # Check if agent analysis was included
+            agent_data = results.get("agent")
+            if agent_data:
+                agent_analysis = AgentAnalysis(**agent_data)
+                logger.info(
+                    f"🤖 Agent analysis included (confidence: {agent_analysis.confidence})"
+                )
+            else:
+                agent_analysis = None
+                logger.info("📊 Simulation completed without agent analysis")
+
+            response = SimulationResponse(
+                **{k: v for k, v in results.items() if k != "agent"},
+                sandbox_id=workspace_id,
+                agent=agent_analysis,
+            )
         except Exception as e:
             logger.error(f"Result validation failed: {e}")
             logger.error(f"Raw results: {results}")
@@ -324,7 +511,13 @@ async def _run_simulation_internal(request: SimulationRequest) -> SimulationResp
             )
 
         elapsed = time.time() - start_time
-        logger.info(f"✅ Simulation completed in {elapsed:.2f}s")
+
+        if response.agent and response.agent.agent_enabled:
+            logger.info(
+                f"✅ Simulation + Agent completed in {elapsed:.2f}s (confidence: {response.agent.confidence})"
+            )
+        else:
+            logger.info(f"✅ Simulation completed in {elapsed:.2f}s")
 
         return response
 

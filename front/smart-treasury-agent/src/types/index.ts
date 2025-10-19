@@ -37,6 +37,16 @@ export interface Policy {
   updated_at: string;
 }
 
+export interface AgentAnalysis {
+  recommendation: string;
+  reasoning: string;
+  riskAssessment: string;
+  confidence: number;
+  agentEnabled: boolean;
+  rawResponse?: string;
+  error?: string;
+}
+
 export interface SimulationMetrics {
   idleCashPct: number;
   liquidityCoverageDays: number;
@@ -48,6 +58,7 @@ export interface SimulationMetrics {
     toAccount: string;
     amount: number;
   };
+  agent?: AgentAnalysis; // AI agent analysis from sandbox
 }
 
 export interface ScenarioRun {
