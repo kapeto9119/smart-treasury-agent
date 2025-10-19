@@ -179,7 +179,9 @@ def run_agent_analysis(
         from anthropic import Anthropic
 
         api_key = os.getenv("ANTHROPIC_API_KEY")
+        print(f"🔑 API key present: {bool(api_key)}", flush=True)
         if not api_key:
+            print("❌ No API key found!", flush=True)
             return {
                 "recommendation": metrics.get("recommendation", ""),
                 "reasoning": "Agent analysis skipped - no API key provided",
@@ -189,7 +191,9 @@ def run_agent_analysis(
             }
 
         # Initialize Claude client
+        print("🤖 Initializing Anthropic client...", flush=True)
         client = Anthropic(api_key=api_key)
+        print("✅ Client initialized", flush=True)
 
         # Calculate context
         total_cash = sum(acc.balance for acc in accounts)
@@ -242,12 +246,14 @@ RISK_ASSESSMENT: [LOW/MEDIUM/HIGH] - [explanation]
 CONFIDENCE: [0.0-1.0]"""
 
         # Call Claude
+        print("📡 Calling Claude API...", flush=True)
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
             system="You are an expert treasury analyst AI agent embedded in a simulation sandbox. Provide precise, data-driven analysis.",
         )
+        print("✅ Claude API call successful!", flush=True)
 
         # Parse response
         text = response.content[0].text if response.content else ""
@@ -295,11 +301,15 @@ CONFIDENCE: [0.0-1.0]"""
 
     except Exception as e:
         # Fallback if agent fails
+        import traceback
+
+        error_details = f"{str(e)}\n{traceback.format_exc()}"
+        print(f"❌ Agent analysis failed: {error_details}", flush=True)
         return {
             "recommendation": metrics.get("recommendation", ""),
             "reasoning": f"Agent analysis failed: {str(e)}. Using calculated metrics only.",
             "risk_assessment": "UNKNOWN",
             "confidence": 0.5,
             "agent_enabled": False,
-            "error": str(e),
+            "error": error_details,
         }

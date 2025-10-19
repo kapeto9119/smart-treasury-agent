@@ -435,41 +435,49 @@ async def _run_simulation_internal(request: SimulationRequest) -> SimulationResp
 
         await daytona_client.upload_file(workspace_id, "sim_runner.py", SIM_CODE)
 
-        # Set environment variables in sandbox (including API key for agent)
+        # Get API key for agent
         anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
         if anthropic_key:
-            logger.info(f"🔑 Setting ANTHROPIC_API_KEY in sandbox for agent analysis")
-            # Set the API key as an environment variable in the sandbox
-            await daytona_client.execute_command(
-                workspace_id, f'export ANTHROPIC_API_KEY="{anthropic_key}"'
-            )
+            logger.info(f"🔑 ANTHROPIC_API_KEY found - agent analysis will be enabled")
         else:
             logger.warning(
                 "⚠️  No ANTHROPIC_API_KEY found - agent analysis will be skipped"
             )
 
-        # Install anthropic package in sandbox
+        # Install anthropic package in sandbox (latest version for Python 3.13 compatibility)
         logger.info(f"📦 Installing anthropic SDK in sandbox")
         install_result = await daytona_client.execute_command(
-            workspace_id, "pip install anthropic==0.39.0 -q"
+            workspace_id, "pip install 'anthropic>=0.40.0' -q 2>&1"
         )
         if install_result["exitCode"] != 0:
             logger.warning(
                 f"⚠️  Failed to install anthropic SDK: {install_result['output']}"
             )
+            if install_result.get("stderr"):
+                logger.warning(f"stderr: {install_result['stderr']}")
 
-        # Execute simulation with agent
+        # Execute simulation with agent (pass API key inline)
         logger.info(
             f"⚙️  Executing simulation with embedded agent in workspace {workspace_id}"
         )
+        # Pass API key as environment variable in the same command
         exec_result = await daytona_client.execute_command(
-            workspace_id, f'ANTHROPIC_API_KEY="{anthropic_key}" python3 sim_runner.py'
+            workspace_id,
+            f'ANTHROPIC_API_KEY="{anthropic_key}" python3 sim_runner.py 2>&1',
         )
 
         if exec_result["exitCode"] != 0:
-            raise HTTPException(
-                status_code=500, detail=f"Simulation failed: {exec_result['output']}"
-            )
+            error_msg = f"Simulation failed: {exec_result['output']}"
+            if exec_result.get("stderr"):
+                error_msg += f"\nstderr: {exec_result['stderr']}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
+
+        # Log execution output for debugging
+        if exec_result["output"]:
+            logger.info(f"📄 Simulation output:\n{exec_result['output']}")
+        if exec_result.get("stderr"):
+            logger.warning(f"⚠️  Simulation stderr:\n{exec_result['stderr']}")
 
         # Download results
         logger.info(f"📥 Downloading results from workspace {workspace_id}")
