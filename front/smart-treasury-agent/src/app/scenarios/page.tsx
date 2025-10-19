@@ -56,7 +56,9 @@ export default function ScenariosPage() {
                     <CardTitle className="capitalize flex items-center gap-2">
                       {scenario.mode}
                       {scenario.metrics?.agent?.agentEnabled && (
-                        <Sparkles className="w-4 h-4 text-purple-500" title="AI Agent Analysis Available" />
+                        <span title="AI Agent Analysis Available">
+                          <Sparkles className="w-4 h-4 text-purple-500" />
+                        </span>
                       )}
                     </CardTitle>
                     <Badge className={getStatusColor(scenario.status)}>
@@ -72,7 +74,11 @@ export default function ScenariosPage() {
                         <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg border border-purple-200">
                           <Brain className="w-4 h-4 text-purple-600" />
                           <span className="text-xs font-medium text-purple-700">
-                            AI Confidence: {(scenario.metrics.agent.confidence * 100).toFixed(0)}%
+                            AI Confidence:{" "}
+                            {(scenario.metrics.agent.confidence * 100).toFixed(
+                              0
+                            )}
+                            %
                           </span>
                         </div>
                       )}
